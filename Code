@@ -1,0 +1,87 @@
+#include<SoftwareSerial.h>
+SoftwareSerial mySerial(9,10); //9 Arduino RX  10 Arduino Tx
+
+int waterPump = 2;
+int Svalve[3] = {3,4,5};
+int a[6]={0,0,0,0,0,0}; //0=>true 1=>false these are required to send msg only when there is a change of state
+
+void setup()
+{
+  Serial.begin(9600);
+  mySerial.begin(9600);
+  pinMode(waterPump,OUTPUT);
+  for(int i=0;i<3;i++)
+   pinMode(Svalve[i],OUTPUT);
+}
+
+void loop()
+{ 
+  int moistureRaw[3] = {analogRead(A0),analogRead(A1),analogRead(A2)};
+  int moisture[3] = {map(moistureRaw[0],1023,0,100,0),map(moistureRaw[1],1023,0,100,0),map(moistureRaw[2],1023,0,100,0)};
+  delay(1000);
+  Serial.print("moisture[0] = ");
+  Serial.println(moisture[0]);
+  Serial.print("moisture[1] = ");
+  Serial.println(moisture[1]);
+  Serial.print("moisture[2] = ");
+  Serial.println(moisture[2]);
+  Serial.println(".........");
+  delay(400);
+
+ String s[6]={"SECTOR 1 WET","SECTOR 1 DRY","SECTOR 2 WET","SECTOR 2 DRY","SECTOR 3 WET","SECTOR 3 DRY"};
+ int i=0,j=0;
+ 
+for(i=0;i<3;i++) //for 3 moisture sensors
+{
+  if(moisture[i]>70)  //100=>dry solenoid valve should be ON when moisture>70
+    {
+    digitalWrite(Svalve[i],HIGH);  //make solenoid valve ON
+    if(a[j+1]==0)
+    SendMessage(s[j+1]);
+    a[j+1]=1;
+    a[j]=0;
+    delay(100);
+    }
+    
+  if(a[j+1]==1 && a[j]==0 && moisture[i]<70 && moisture[i]>40)  //this block is executed only after the above block & 40<moisture<70
+  {
+    digitalWrite(Svalve[i],HIGH);
+  }
+    
+  if(moisture[i]<40)  //0=>wet desired value is 40 if moisture<40 valve should be OFF
+    {
+     digitalWrite(Svalve[i],LOW);  //make solenoid valve OFF
+     //motor OFF
+        if(Svalve[0]==LOW && Svalve[1]==LOW && Svalve[2]==LOW) //OFF of motor pump should immediately takes place just after the all the valves are CLOSED(OFF) otherwise motor gets BURNT
+         {
+           digitalWrite(waterPump,LOW);
+           delay(100);
+        }
+     if(a[j]==0)
+     SendMessage(s[j]);
+     a[j]=1;
+     a[j+1]=0;
+     delay(100);
+    }
+  j=j+2;
+}
+
+//motor ON 
+  if(Svalve[0]==HIGH || Svalve[1]==HIGH || Svalve[2]==HIGH) //ON of motor pump should take place when any one valve is OPEN(ON)
+    {
+    digitalWrite(waterPump,HIGH);
+    delay(100);
+    }
+}
+
+void SendMessage(String s)
+{
+  mySerial.println("AT+CMGF=1");    //Sets the GSM Module in Text Mode
+  delay(1000);  // Delay of 1000 milli seconds or 1 second
+  mySerial.println("AT+CMGS=\"+916281501847\"\r"); // Replace x with mobile number
+  delay(1000);
+  mySerial.println(s);// The SMS text you want to send
+  delay(1000);
+   mySerial.println((char)26);// ASCII code of CTRL+Z
+  delay(1000);
+}
